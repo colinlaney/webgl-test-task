@@ -36,13 +36,28 @@
     }
 </script>
 
-<script id="vertex-shader" type="x-shader/x-vertex">
-    uniform mat4 waveArray[3]; varying vec2 vUv; void main(){ vUv = uv; if(position.x > 0.) gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[0] * vec4(position, 1.0); else gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[1] * vec4(position, 1.0); }
+<script id ="vertex-shader" type="x-shader/x-vertex">
+	uniform mat4 waveArray[3];
+    varying vec2 vUv;
+    void main(){
+        vUv = uv;
+		if(position.x > 0.)
+        gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[0] * vec4(position, 1.0);
+		else
+        gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[1] * vec4(position, 1.0);
+    }
 
 </script>
 
-<script id="fragment-shader" type="x-shader/x-fragment">
-    uniform sampler2D texture; uniform float time; varying vec2 vUv; void main(){ float tr = 1.; //cos(time)*0.5 + 0.5; vec4 texel = texture2D( texture, vUv); gl_FragColor = vec4(texel.rgb, tr); }
+<script id ="fragment-shader" type="x-shader/x-fragment">
+    uniform sampler2D texture;
+    uniform float time;
+    varying vec2 vUv;
+    void main(){
+        float tr = 1.;	//cos(time)*0.5 + 0.5;
+        vec4 texel = texture2D( texture, vUv);
+        gl_FragColor = vec4(texel.rgb, tr);
+    }
 </script>
 
 
