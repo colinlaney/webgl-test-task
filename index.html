@@ -3,55 +3,97 @@
 <script src="./js/OrbitControls.js"></script>
 
 <script>
-function createMyCustomGeometry(){
-    return new THREE.SphereGeometry(50,20,20);
-}
-</script>
+    function createMyCustomGeometry(w) {
+        var up = 100;
+        var width = 100;
+        var height = 100;
+        var step = width / w;
+        var plane = new THREE.Geometry();
+        for (var i = 0; i < w + 1; i++) {
+            plane.vertices.push(
+                new THREE.Vector3(width, up, step * i),
+                new THREE.Vector3(-width, up, step * i)
+            );
+        }
+        var face = new THREE.Face3(0, 1, 2);
+        var normal = new THREE.Vector3(0, 1, 0);
 
-<script id ="vertex-shader" type="x-shader/x-vertex">
+        for (var i = 0; i < w * 2; i += 2) {
+            plane.faces.push(new THREE.Face3(i, i + 1, i + 2));
+            plane.faces.push(new THREE.Face3(i + 2, i + 1, i + 3));
+        }
 
-    varying vec2 vUv;
-    void main(){
-        vUv = uv;
-        gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+        var uva = new THREE.Vector2(0, 0);
+        var uvb = new THREE.Vector2(0, 1);
+        var uvc = new THREE.Vector2(1, 0);
+        var uvd = new THREE.Vector2(1, 1);
+
+        step = 1 / w;
+        plane.faceVertexUvs[0].push([uva, uvb, uvc]);
+        plane.faceVertexUvs[0].push([uvc, uvb, uvd]);
+
+        return plane;
     }
+</script>
+
+<script id="vertex-shader" type="x-shader/x-vertex">
+    uniform mat4 waveArray[3]; varying vec2 vUv; void main(){ vUv = uv; if(position.x > 0.) gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[0] * vec4(position, 1.0); else gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[1] * vec4(position, 1.0); }
 
 </script>
 
-<script id ="fragment-shader" type="x-shader/x-fragment">
-    uniform sampler2D texture;
-    uniform float time;
-    varying vec2 vUv;
-    void main(){
-        float tr = cos(time)*0.5 + 0.5;
-        vec4 texel = texture2D( texture, vUv);
-        gl_FragColor = vec4(texel.rgb, tr);
-    }
+<script id="fragment-shader" type="x-shader/x-fragment">
+    uniform sampler2D texture; uniform float time; varying vec2 vUv; void main(){ float tr = 1.; //cos(time)*0.5 + 0.5; vec4 texel = texture2D( texture, vUv); gl_FragColor = vec4(texel.rgb, tr); }
 </script>
 
 
-<script >
-
+<script>
     var UNIFORMS = {
-        "time": {type:"f", value:0.0},
-        "texture":{type:"t", value: THREE.ImageUtils.loadTexture( "textures/earth.png" )}
-            
+        "waveArray": {
+            type: "m4v",
+            value: [new THREE.Matrix4(
+                    1, 0, 0, -100,
+                    0, 1, 0, 100,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1),
+                new THREE.Matrix4(1, 0, 0, 0,
+                    0, 1, 0, -100,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1),
+                new THREE.Matrix4(1, 0, 0, 0,
+                    0, 1, 0, -100,
+                    0, 0, 1, 0,
+                    0, 0, 0, 1)
+            ]
+        },
+        "time": {
+            type: "f",
+            value: 0.0
+        },
+        "texture": {
+            type: "t",
+            value: THREE.ImageUtils.loadTexture("textures/earth.png")
+        }
+
     }; // place all needed uniforms here;
 
-    
-    function getUniformUpdater(){
+
+    function getUniformUpdater() {
         var totalTime = 0;
-        return function(dt){
-            totalTime += dt;
-            UNIFORMS.time.value = totalTime;
-            // Place here anything, that must be updated;
-        }
-        // This function allows to change uniform values in array above;
+        return function(dt) {
+                totalTime += dt;
+                UNIFORMS.time.value = totalTime;
+                UNIFORMS.waveArray.value[0].makeTranslation(0, Math.cos(totalTime) * 10, 0);
+                UNIFORMS.waveArray.value[1].makeTranslation(0, -Math.cos(totalTime) * 10, 0);
+                // Place here anything, that must be updated;
+            }
+            // This function allows to change uniform values in array above;
     }
-    function startAnimation(renderer, camera, scene){
+
+    function startAnimation(renderer, camera, scene) {
         var updater = getUniformUpdater();
-        function animate( ) {
-            requestAnimationFrame( animate );
+
+        function animate() {
+            requestAnimationFrame(animate);
             render();
         }
         var CT = Date.now();
@@ -59,83 +101,90 @@ function createMyCustomGeometry(){
         function render() {
             var t = Date.now();
             var dt = t - CT;
-            updater(dt/1000);
+            updater(dt / 1000);
             CT = t;
-            renderer.render( scene, camera );
+            renderer.render(scene, camera);
         }
         animate();
     }
-    
 
-    function start(){
-        var geometry = createMyCustomGeometry();
+
+    function start() {
+        var geometry = createMyCustomGeometry(3);
         var material = new THREE.ShaderMaterial({
-                vertexShader: document.getElementById("vertex-shader").innerText,
-                fragmentShader: document.getElementById("fragment-shader").innerText,
-                uniforms: UNIFORMS, 
-                transparent:true
-            });
-        
+            vertexShader: document.getElementById("vertex-shader").innerText,
+            fragmentShader: document.getElementById("fragment-shader").innerText,
+            uniforms: UNIFORMS,
+            transparent: false
+        });
 
-        var renderer = new THREE.WebGLRenderer({ antialias:true, alpha: true });
-        var container = document.getElementById( 'container' );
+
+        var renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: true
+        });
+        var container = document.getElementById('container');
 
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        var camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 3000 );
-        camera.position.y = 500 ;
-        camera.position.x = 500 ;
+        var camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 3000);
+        camera.position.y = 500;
+        camera.position.x = 500;
         camera.position.z = 200;
-        camera.lookAt(0,0,0);
+        camera.lookAt(0, 0, 0);
 
         scene = new THREE.Scene();
-        controls = new THREE.OrbitControls( camera, renderer.domElement );
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
         // LIGHT
         var light = new THREE.PointLight(0xffffff);
-        light.position.set(0,250,0);
+        light.position.set(0, 250, 0);
         scene.add(light);
         // FLOOR
-        var floorTexture = new THREE.ImageUtils.loadTexture( 'textures/checkerboard.jpg' );
-        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; 
-        floorTexture.repeat.set( 10, 10 );
-        var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+        var floorTexture = new THREE.ImageUtils.loadTexture('textures/checkerboard.jpg');
+        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set(10, 10);
+        var floorMaterial = new THREE.MeshBasicMaterial({
+            map: floorTexture,
+            side: THREE.DoubleSide
+        });
         var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
         var floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.position.y = -0.5;
         floor.rotation.x = Math.PI / 2;
         scene.add(floor);
         // SKYBOX/FOG
-        var skyBoxGeometry = new THREE.BoxGeometry( 10000, 10000, 10000 );
-        var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x9999ff, side: THREE.BackSide } );
-        var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+        var skyBoxGeometry = new THREE.BoxGeometry(10000, 10000, 10000);
+        var skyBoxMaterial = new THREE.MeshBasicMaterial({
+            color: 0x9999ff,
+            side: THREE.BackSide
+        });
+        var skyBox = new THREE.Mesh(skyBoxGeometry, skyBoxMaterial);
         scene.add(skyBox);
-        scene.fog = new THREE.FogExp2( 0x9999ff, 0.00025 );
+        scene.fog = new THREE.FogExp2(0x9999ff, 0.00025);
 
 
         //ACTUAL Mesh
         var mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
-        container.appendChild( renderer.domElement );
+        container.appendChild(renderer.domElement);
         startAnimation(renderer, camera, scene);
 
     }
-
-
-
-
 </script>
 <style>
-    body{
-        width:100%;
-        height:100%;
-        margin:0;
-        padding:0;
+    body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
     }
-    #container{
-        width:100%;
-        height:100%;
+    
+    #container {
+        width: 100%;
+        height: 100%;
     }
 </style>
+
 <body onload="start();">
     <div id="container">
     </div>
