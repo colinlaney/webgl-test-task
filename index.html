@@ -97,7 +97,7 @@
 </script>
 
 <script>
-	const W = 20; // segments
+	const W = 50; // segments
 	var ATTRIBUTES = {
 		"segment": {
 			type: "i",
@@ -192,7 +192,7 @@
 			transparent: false,
 			side: THREE.DoubleSide
 		});
-		material.vertexShader = document.getElementById("vertex-shader").innerText.replace("waveArrayElements", W);
+		//material.vertexShader = document.getElementById("vertex-shader").innerText.replace("waveArrayElements", W);
 
 		var renderer = new THREE.WebGLRenderer({
 			antialias: true,
