@@ -6,15 +6,15 @@
     function createMyCustomGeometry(w) {
         const WIDTH = 1.;
         const HEIGHT = 1.;
-        const STEP = HEIGHT / w;
+        const STEP = WIDTH / w;
 
         /*vertices*/
         var plane = new THREE.Geometry();
 
         for (var i = 0; i < w + 1; i++) {
             plane.vertices.push(
-                new THREE.Vector3(STEP * i, WIDTH, 0),
-                new THREE.Vector3(STEP * i, -WIDTH, 0)
+                new THREE.Vector3(STEP * i, HEIGHT, 0),
+                new THREE.Vector3(STEP * i, -HEIGHT, 0)
             );
         }
 
@@ -47,197 +47,226 @@
     }
 </script>
 
-<script id ="vertex-shader" type="x-shader/x-vertex">
-	uniform mat4 waveArray[3];
+<script id="vertex-shader-spline" type="x-shader/x-vertex">
+    const int BezierDegree = 4; // for cubic Bezier curve
+	uniform vec3 controlPoints[BezierDegree];
 	uniform float time;
+	uniform float segments;
 	attribute float segment;
-    varying vec2 vUv;
-	float PI = 3.14159265358979323846264;
-    void main(){
-        vUv = uv;
-        gl_Position = projectionMatrix * viewMatrix * modelMatrix * //vec4(1,int(segment)/2,1,1);
-			mat4(
-				1, 0, 0, 0,
-				0, 1, 0, 0,
-				0, 0, 1, 0,
-				0,0, cos(time+2.*PI*segment/49.)*10., 1
-			) * /*waveArray[2] **/ vec4(position, 1.0);
-    }
-
+	varying vec2 vUv;
+	void main(){
+		float Bernstein[BezierDegree];
+		float t = segment / (segments - 1.);
+		float nt = 1.0 - t;
+		vec3 point = position;
+		Bernstein[0] = nt*nt*nt;
+		Bernstein[1] = 3.0*nt*nt*t;
+		Bernstein[2] = 3.0*nt*t*t;
+		Bernstein[3] = t*t*t;
+		for(int i = 0; i < BezierDegree; i++)
+			point += controlPoints[i] * Bernstein[i];
+		point.x /= 2.0;
+		gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(point, 1.0);
+		vUv = uv;
+	}
 </script>
 
-<script id ="fragment-shader" type="x-shader/x-fragment">
-    uniform sampler2D texture;
-    uniform float time;
-    varying vec2 vUv;
-	float PI = 3.14159265358979323846264;
-    void main(){
-        float tr = 1.;	//cos(time)*0.5 + 0.5;
-        vec4 texel = texture2D( texture, vec2(mod(vUv.x+time/2./PI, 1.), vUv.y));
-        gl_FragColor = vec4(texel.rgb, tr);
-    }
+<script id="vertex-shader" type="x-shader/x-vertex">
+    uniform mat4 waveArray[waveArrayElements];
+	uniform float time;
+	uniform float segments;
+	attribute float segment;
+	varying vec2 vUv;
+	void main(){
+		vec3 point = position;
+		gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[int(segment)] * vec4(point, 1.0);
+		vUv = uv;
+	}
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+	uniform sampler2D texture;
+	uniform float T; // wave period
+	uniform float time;
+	varying vec2 vUv;
+	void main(){
+		float tr = 1.;
+		vec4 texel = texture2D(texture, vec2(mod(vUv.x + time/T, 1.), vUv.y));
+		gl_FragColor = vec4(texel.rgb, tr);
+	}
 </script>
 
 <script>
-	const W = 50;
+	const W = 20; // segments
 	var ATTRIBUTES = {
 		"segment": {
 			type: "i",
 			value: []
 		}
 	};
-	for(var i = 0; i < W; i++){
+	for (var i = 0; i < W; i++) {
 		ATTRIBUTES.segment.value.push(i, i);
 	}
-	
-    var UNIFORMS = {
-        "waveArray": {
-            type: "m4v",
-            value: [new THREE.Matrix4(
-                    1, 0, 0, -100,
-                    0, 1, 0, 100,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1),
-                new THREE.Matrix4(
-					1, 0, 0, 0,
-                    0, 1, 0, -100,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1),
-                new THREE.Matrix4(
-					1, 0, 0, 0,
-                    0, 1, 0, -100,
-                    0, 0, 1, 0,
-                    0, 0, 0, 1)
-            ]
-        },
-        "time": {
-            type: "f",
-            value: 0.0
-        },
-        "texture": {
-            type: "t",
-            value: THREE.ImageUtils.loadTexture("textures/earth.png")
-        }
 
-    }; // place all needed uniforms here;
+	var UNIFORMS = {
+		"waveArray": {
+			type: "m4v",
+			value: []
+		},
+		"controlPoints": {
+			type: "v3v",
+			value: [new THREE.Vector3(0, 0, 0),
+				new THREE.Vector3(0.25, 0, 1),
+				new THREE.Vector3(0.75, 0, -1),
+				new THREE.Vector3(1, 0, 0)
+			]
+		},
+		"time": {
+			type: "f",
+			value: 0.0
+		},
+		"T": {
+			type: "f",
+			value: 2. * Math.PI
+		},
+		"segments": {
+			type: "f",
+			value: W
+		},
+		"texture": {
+			type: "t",
+			value: THREE.ImageUtils.loadTexture("textures/earth.png")
+		}
 
-    function getUniformUpdater() {
-        var totalTime = 0;
-        return function(dt) {
-                totalTime += dt;
-                UNIFORMS.time.value = totalTime;
-                UNIFORMS.waveArray.value[0].makeTranslation(0, Math.cos(totalTime) * 10, 0);
-                UNIFORMS.waveArray.value[1].makeTranslation(0, Math.sin(totalTime) * 10, 0);
-                UNIFORMS.waveArray.value[2].makeTranslation(0, -Math.cos(totalTime) * 10, 0);
-                // Place here anything, that must be updated;
-            }
-            // This function allows to change uniform values in array above;
-    }
-
-    function startAnimation(renderer, camera, scene) {
-        var updater = getUniformUpdater();
-
-        function animate() {
-            requestAnimationFrame(animate);
-            render();
-        }
-        var CT = Date.now();
-
-        function render() {
-            var t = Date.now();
-            var dt = t - CT;
-            updater(dt / 1000);
-            CT = t;
-            renderer.render(scene, camera);
-        }
-        animate();
-    }
+	}; // place all needed uniforms here;
+	for (var i = 0; i < W; i++) {
+		UNIFORMS.waveArray.value.push(new THREE.Matrix4(
+			1, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, 1, Math.cos(i * 2 * Math.PI / W),
+			0, 0, 0, 1));
+	}
 
 
-    function start() {
-        var geometry = createMyCustomGeometry(W);
-        var material = new THREE.ShaderMaterial({
-            vertexShader: document.getElementById("vertex-shader").innerText,
-            fragmentShader: document.getElementById("fragment-shader").innerText,
-            uniforms: UNIFORMS,
+	function getUniformUpdater() {
+		var totalTime = 0;
+		return function(dt) {
+				totalTime += dt;
+				UNIFORMS.time.value = totalTime;
+				for (var i = 0; i < 4; i++)
+					UNIFORMS.controlPoints.value[i].z = Math.cos(totalTime + i * Math.PI / 2);
+				for (var i = 0; i < W; i++)
+					UNIFORMS.waveArray.value[i].makeTranslation(0, 0, Math.cos(totalTime + i * 2 * Math.PI / W));
+				// Place here anything, that must be updated;
+			}
+			// This function allows to change uniform values in array above;
+	}
+
+	function startAnimation(renderer, camera, scene) {
+		var updater = getUniformUpdater();
+
+		function animate() {
+			requestAnimationFrame(animate);
+			render();
+		}
+		var CT = Date.now();
+
+		function render() {
+			var t = Date.now();
+			var dt = t - CT;
+			updater(dt / 1000);
+			CT = t;
+			renderer.render(scene, camera);
+		}
+		animate();
+	}
+
+
+	function start() {
+		var geometry = createMyCustomGeometry(W);
+		var material = new THREE.ShaderMaterial({
+			vertexShader: document.getElementById("vertex-shader-spline").innerText,
+			fragmentShader: document.getElementById("fragment-shader").innerText,
+			uniforms: UNIFORMS,
 			attributes: ATTRIBUTES,
-            transparent: false,
+			transparent: false,
 			side: THREE.DoubleSide
-        });
+		});
+		material.vertexShader = document.getElementById("vertex-shader").innerText.replace("waveArrayElements", W);
 
-        var renderer = new THREE.WebGLRenderer({
-            antialias: true,
-            alpha: true
-        });
-        var container = document.getElementById('container');
+		var renderer = new THREE.WebGLRenderer({
+			antialias: true,
+			alpha: true
+		});
+		var container = document.getElementById('container');
 
-        renderer.setSize(window.innerWidth, window.innerHeight);
+		renderer.setSize(window.innerWidth, window.innerHeight);
 
-        var camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 3000);
-        camera.position.y = 500;
-        camera.position.x = 500;
-        camera.position.z = 200;
-        camera.lookAt(0, 0, 0);
+		var camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 3000);
+		camera.position.y = 500;
+		camera.position.x = 500;
+		camera.position.z = 200;
+		camera.lookAt(0, 0, 0);
 
-        scene = new THREE.Scene();
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
-        // LIGHT
-        var light = new THREE.PointLight(0xffffff);
-        light.position.set(0, 250, 0);
-        scene.add(light);
-        // FLOOR
-        var floorTexture = new THREE.ImageUtils.loadTexture('textures/checkerboard.jpg');
-        floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-        floorTexture.repeat.set(10, 10);
-        var floorMaterial = new THREE.MeshBasicMaterial({
-            map: floorTexture,
-            side: THREE.DoubleSide
-        });
-        var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
-        var floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.position.y = -0.5;
-        floor.rotation.x = Math.PI / 2;
-        scene.add(floor);
-        // SKYBOX/FOG
-        var skyBoxGeometry = new THREE.BoxGeometry(10000, 10000, 10000);
-        var skyBoxMaterial = new THREE.MeshBasicMaterial({
-            color: 0x9999ff,
-            side: THREE.BackSide
-        });
-        var skyBox = new THREE.Mesh(skyBoxGeometry, skyBoxMaterial);
-        scene.add(skyBox);
-        scene.fog = new THREE.FogExp2(0x9999ff, 0.00025);
+		scene = new THREE.Scene();
+		controls = new THREE.OrbitControls(camera, renderer.domElement);
+		// LIGHT
+		var light = new THREE.PointLight(0xffffff);
+		light.position.set(0, 250, 0);
+		scene.add(light);
+		// FLOOR
+		var floorTexture = new THREE.ImageUtils.loadTexture('textures/checkerboard.jpg');
+		floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+		floorTexture.repeat.set(10, 10);
+		var floorMaterial = new THREE.MeshBasicMaterial({
+			map: floorTexture,
+			side: THREE.DoubleSide
+		});
+		var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
+		var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+		floor.position.y = -0.5;
+		floor.rotation.x = Math.PI / 2;
+		scene.add(floor);
+		// SKYBOX/FOG
+		var skyBoxGeometry = new THREE.BoxGeometry(10000, 10000, 10000);
+		var skyBoxMaterial = new THREE.MeshBasicMaterial({
+			color: 0x9999ff,
+			side: THREE.BackSide
+		});
+		var skyBox = new THREE.Mesh(skyBoxGeometry, skyBoxMaterial);
+		scene.add(skyBox);
+		scene.fog = new THREE.FogExp2(0x9999ff, 0.00025);
 
 
-        //ACTUAL Mesh
-        var mesh = new THREE.Mesh(geometry, material);
+		//ACTUAL Mesh
+		var mesh = new THREE.Mesh(geometry, material);
 		mesh.position.y = 100;
-		mesh.position.x = -200;
-		mesh.rotation.x = Math.PI/2;
-		mesh.scale = new THREE.Vector3(400, 100, 10);
-        scene.add(mesh);
-        container.appendChild(renderer.domElement);
-        startAnimation(renderer, camera, scene);
+		mesh.position.x = -100;
+		mesh.rotation.x = -Math.PI / 2;
+		mesh.scale = new THREE.Vector3(200, 100, 100);
+		scene.add(mesh);
+		container.appendChild(renderer.domElement);
+		startAnimation(renderer, camera, scene);
 
-    }
+	}
 </script>
 <style>
-    body {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
-    }
-    
-    #container {
-        width: 100%;
-        height: 100%;
-    }
+	body {
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0;
+	}
+	
+	#container {
+		width: 100%;
+		height: 100%;
+	}
 </style>
 
 <body onload="start();">
-    <div id="container">
-    </div>
+	<div id="container">
+	</div>
 
 </body>
-<html>
+</html>
