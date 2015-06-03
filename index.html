@@ -4,17 +4,21 @@
 
 <script>
     function createMyCustomGeometry(w) {
-        var up = 100;
-        var width = 100;
-        var height = 100;
-        var step = width / w;
+        const WIDTH = 1.;
+        const HEIGHT = 1.;
+        const STEP = HEIGHT / w;
+
+        /*vertices*/
         var plane = new THREE.Geometry();
+
         for (var i = 0; i < w + 1; i++) {
             plane.vertices.push(
-                new THREE.Vector3(width, up, step * i),
-                new THREE.Vector3(-width, up, step * i)
+                new THREE.Vector3(STEP * i, WIDTH, 0),
+                new THREE.Vector3(STEP * i, -WIDTH, 0)
             );
         }
+
+        /*faces*/
         var face = new THREE.Face3(0, 1, 2);
         var normal = new THREE.Vector3(0, 1, 0);
 
@@ -23,14 +27,21 @@
             plane.faces.push(new THREE.Face3(i + 2, i + 1, i + 3));
         }
 
+        /*texture*/
+        var uvstep = new THREE.Vector2(1 / w, 0);
         var uva = new THREE.Vector2(0, 0);
+        var uvc = new THREE.Vector2(1 / w, 0);
         var uvb = new THREE.Vector2(0, 1);
-        var uvc = new THREE.Vector2(1, 0);
-        var uvd = new THREE.Vector2(1, 1);
+        var uvd = new THREE.Vector2(1 / w, 1);
 
-        step = 1 / w;
-        plane.faceVertexUvs[0].push([uva, uvb, uvc]);
-        plane.faceVertexUvs[0].push([uvc, uvb, uvd]);
+        for (var i = 0; i < w; i++) {
+            plane.faceVertexUvs[0].push([uva, uvb, uvc]);
+            plane.faceVertexUvs[0].push([uvc, uvb, uvd]);
+            uva = uva.clone().add(uvstep);
+            uvb = uvb.clone().add(uvstep);
+            uvc = uvc.clone().add(uvstep);
+            uvd = uvd.clone().add(uvstep);
+        }
 
         return plane;
     }
@@ -38,13 +49,19 @@
 
 <script id ="vertex-shader" type="x-shader/x-vertex">
 	uniform mat4 waveArray[3];
+	uniform float time;
+	attribute float segment;
     varying vec2 vUv;
+	float PI = 3.14159265358979323846264;
     void main(){
         vUv = uv;
-		if(position.x > 0.)
-        gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[0] * vec4(position, 1.0);
-		else
-        gl_Position = projectionMatrix * viewMatrix * modelMatrix * waveArray[1] * vec4(position, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * modelMatrix * //vec4(1,int(segment)/2,1,1);
+			mat4(
+				1, 0, 0, 0,
+				0, 1, 0, 0,
+				0, 0, 1, 0,
+				0,0, cos(time+2.*PI*segment/49.)*10., 1
+			) * /*waveArray[2] **/ vec4(position, 1.0);
     }
 
 </script>
@@ -53,15 +70,26 @@
     uniform sampler2D texture;
     uniform float time;
     varying vec2 vUv;
+	float PI = 3.14159265358979323846264;
     void main(){
         float tr = 1.;	//cos(time)*0.5 + 0.5;
-        vec4 texel = texture2D( texture, vUv);
+        vec4 texel = texture2D( texture, vec2(mod(vUv.x+time/2./PI, 1.), vUv.y));
         gl_FragColor = vec4(texel.rgb, tr);
     }
 </script>
 
-
 <script>
+	const W = 50;
+	var ATTRIBUTES = {
+		"segment": {
+			type: "i",
+			value: []
+		}
+	};
+	for(var i = 0; i < W; i++){
+		ATTRIBUTES.segment.value.push(i, i);
+	}
+	
     var UNIFORMS = {
         "waveArray": {
             type: "m4v",
@@ -70,11 +98,13 @@
                     0, 1, 0, 100,
                     0, 0, 1, 0,
                     0, 0, 0, 1),
-                new THREE.Matrix4(1, 0, 0, 0,
+                new THREE.Matrix4(
+					1, 0, 0, 0,
                     0, 1, 0, -100,
                     0, 0, 1, 0,
                     0, 0, 0, 1),
-                new THREE.Matrix4(1, 0, 0, 0,
+                new THREE.Matrix4(
+					1, 0, 0, 0,
                     0, 1, 0, -100,
                     0, 0, 1, 0,
                     0, 0, 0, 1)
@@ -91,14 +121,14 @@
 
     }; // place all needed uniforms here;
 
-
     function getUniformUpdater() {
         var totalTime = 0;
         return function(dt) {
                 totalTime += dt;
                 UNIFORMS.time.value = totalTime;
                 UNIFORMS.waveArray.value[0].makeTranslation(0, Math.cos(totalTime) * 10, 0);
-                UNIFORMS.waveArray.value[1].makeTranslation(0, -Math.cos(totalTime) * 10, 0);
+                UNIFORMS.waveArray.value[1].makeTranslation(0, Math.sin(totalTime) * 10, 0);
+                UNIFORMS.waveArray.value[2].makeTranslation(0, -Math.cos(totalTime) * 10, 0);
                 // Place here anything, that must be updated;
             }
             // This function allows to change uniform values in array above;
@@ -125,14 +155,15 @@
 
 
     function start() {
-        var geometry = createMyCustomGeometry(3);
+        var geometry = createMyCustomGeometry(W);
         var material = new THREE.ShaderMaterial({
             vertexShader: document.getElementById("vertex-shader").innerText,
             fragmentShader: document.getElementById("fragment-shader").innerText,
             uniforms: UNIFORMS,
-            transparent: false
+			attributes: ATTRIBUTES,
+            transparent: false,
+			side: THREE.DoubleSide
         });
-
 
         var renderer = new THREE.WebGLRenderer({
             antialias: true,
@@ -180,6 +211,10 @@
 
         //ACTUAL Mesh
         var mesh = new THREE.Mesh(geometry, material);
+		mesh.position.y = 100;
+		mesh.position.x = -200;
+		mesh.rotation.x = Math.PI/2;
+		mesh.scale = new THREE.Vector3(400, 100, 10);
         scene.add(mesh);
         container.appendChild(renderer.domElement);
         startAnimation(renderer, camera, scene);
