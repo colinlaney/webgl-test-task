@@ -90,8 +90,16 @@
 	uniform float time;
 	varying vec2 vUv;
 	void main(){
+	vec4 offset;
+	offset.x = -.5;
+	offset.y = -.5;
+	offset.z = 2.;
+	offset.w = 1.;
 		float tr = 1.;
-		vec4 texel = texture2D(texture, vec2(mod(vUv.x + time/T, 1.), vUv.y));
+		vec4 texel = texture2D(texture, vec2(2.*vUv.x + time/T, vUv.y));
+		texel += texture2D(texture, vec2(2.*vUv.x + time/T+0.005, vUv.y+0.005));
+		texel /= 2.;
+		//vec4 texel = texture2D(texture, vec2(mod(2.*vUv.x + time/T, 1.), vUv.y));
 		gl_FragColor = vec4(texel.rgb, tr);
 	}
 </script>
@@ -135,10 +143,11 @@
 		},
 		"texture": {
 			type: "t",
-			value: THREE.ImageUtils.loadTexture("textures/earth.png")
+			value: new THREE.ImageUtils.loadTexture("textures/earth.png")
 		}
 
 	}; // place all needed uniforms here;
+	UNIFORMS.texture.value.wrapS /*= UNIFORMS.texture.value.wrapT*/ = THREE.RepeatWrapping; 
 	for (var i = 0; i < W; i++) {
 		UNIFORMS.waveArray.value.push(new THREE.Matrix4(
 			1, 0, 0, 0,
@@ -222,7 +231,7 @@
 			map: floorTexture,
 			side: THREE.DoubleSide
 		});
-		var floorGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
+		var floorGeometry = new THREE.PlaneGeometry(1000, 700, 10, 10);
 		var floor = new THREE.Mesh(floorGeometry, floorMaterial);
 		floor.position.y = -0.5;
 		floor.rotation.x = Math.PI / 2;
@@ -246,7 +255,23 @@
 		mesh.scale = new THREE.Vector3(200, 100, 100);
 		scene.add(mesh);
 		container.appendChild(renderer.domElement);
+		var gl = renderer.context;
+		var fbo;var target=1;
+		fbo = gl.createFramebuffer();	// @ Danchilla, p. 287
+		fbo.width = 256;
+		fbo.height = 256;
+		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+		var fboTexture = gl.createTexture();
+		gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, fbo.width, fbo.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+		gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTexture, 0);
+		//gl.createRenderbuffer(target, fbo);
+		//gl.bindRenderbuffer(gl.RENDERBUFFER, fbo);
+		console.log(fbo);
+		gl.viewport(0, 0, fbo.width, fbo.height);
 		startAnimation(renderer, camera, scene);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.bindTexture(gl.TEXTURE_2D, null);
 
 	}
 </script>
