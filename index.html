@@ -258,8 +258,8 @@
 		var gl = renderer.context;
 		var fbo;var target=1;
 		fbo = gl.createFramebuffer();	// @ Danchilla, p. 287
-		fbo.width = 256;
-		fbo.height = 256;
+		fbo.width = window.innerWidth;
+		fbo.height = window.innerHeight;
 		gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
 		var fboTexture = gl.createTexture();
 		gl.bindTexture(gl.TEXTURE_2D, fboTexture);
